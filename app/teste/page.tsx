@@ -1,207 +1,395 @@
-const FORMAS: Forma[] = [
-  'circle',
-  'square',
-  'triangle',
-  'diamond',
-  'hexagon',
-  'cross',
-];
+'use client';
 
-const CATEGORIAS = [
-  'Sequências geométricas',
-  'Rotação espacial',
-  'Quantidade e preenchimento',
-  'Transformações matriciais',
-  'Progressão de formas',
-  'Raciocínio combinado',
-  'Matrizes avançadas',
-];
+import { useState, useEffect, useCallback } from 'react';
 
-const TITULOS = [
-  'Observe a sequência de formas. Qual figura completa corretamente o padrão?',
-  'As figuras passam por uma transformação a cada coluna. Identifique a posição que falta.',
-  'Observe a quantidade, o formato e o preenchimento das figuras. Qual alternativa completa a matriz?',
-  'Analise as mudanças nas linhas e colunas para descobrir a figura ausente.',
-  'Identifique a regra de progressão geométrica e escolha a continuação correta.',
-  'Observe as duas regras que atuam simultaneamente. Qual figura respeita ambas?',
-  'Analise cuidadosamente os elementos da matriz e encontre a única alternativa compatível.',
-];
+type TipoForma = 'circle' | 'square' | 'triangle' | 'diamond' | 'star' | 'cross' | 'arrow' | 'ring';
+type Tamanho = 'lg' | 'md' | 'sm';
+type Posicao = 'center' | 'tl' | 'tr' | 'bl' | 'br';
 
-// Cada família possui uma regra visual própria.
-// Linha e coluna determinam a resposta de maneira verificável.
-function criarCelula(
-  familia: number,
-  variante: number,
-  linha: number,
-  coluna: number
-): Celula {
-  const base = variante + familia;
-
-  switch (familia) {
-    // 1. Formas mudam horizontalmente.
-    // Quantidade muda verticalmente.
-    case 0:
-      return {
-        forma: FORMAS[(coluna + base) % 6],
-        quantidade: linha + 1,
-        rotacao: 0,
-        preenchida: false,
-      };
-
-    // 2. Formas mudam verticalmente.
-    // Rotação muda horizontalmente.
-    case 1:
-      return {
-        forma: FORMAS[(linha + base) % 6],
-        quantidade: 1,
-        rotacao: (coluna * 90) % 360,
-        preenchida: false,
-      };
-
-    // 3. Forma acompanha a diagonal.
-    // Quantidade acompanha a coluna.
-    // Preenchimento alterna por linha.
-    case 2:
-      return {
-        forma: FORMAS[(linha + coluna + base) % 6],
-        quantidade: coluna + 1,
-        rotacao: 0,
-        preenchida: linha % 2 === 0,
-      };
-
-    // 4. Combinação de progressão de formas,
-    // quantidade, rotação e preenchimento.
-    case 3:
-      return {
-        forma: FORMAS[(linha * 2 + coluna + base) % 6],
-        quantidade: linha + 1,
-        rotacao: coluna * 45,
-        preenchida: coluna % 2 === 0,
-      };
-
-    // 5. Progressão horizontal e vertical combinada.
-    case 4:
-      return {
-        forma: FORMAS[(linha + coluna * 2 + base) % 6],
-        quantidade: coluna + 1,
-        rotacao: linha * 90,
-        preenchida: linha === coluna,
-      };
-
-    // 6. Alternância de elementos e rotações.
-    case 5:
-      return {
-        forma: FORMAS[(linha + coluna * 2 + base) % 6],
-        quantidade: (linha % 2) + 1,
-        rotacao: ((linha + coluna) * 45) % 360,
-        preenchida: (linha + coluna) % 2 === 0,
-      };
-
-    // 7. Combinação avançada de regras.
-    default:
-      return {
-        forma: FORMAS[(linha * 2 + coluna * 2 + base) % 6],
-        quantidade: ((linha * 2 + coluna) % 3) + 1,
-        rotacao: (linha * 90 + coluna * 45) % 360,
-        preenchida: (linha + coluna) % 2 === 0,
-      };
-  }
+interface Celula {
+  forma: TipoForma;
+  cor: string;
+  tamanho?: Tamanho;
+  quantidade?: number;
+  preenchida?: boolean;
+  rotacao?: number;
+  posicao?: Posicao;
+  pontoInterno?: boolean;
+  unidos?: boolean;
 }
 
-function assinatura(c: Celula): string {
-  return `${c.forma}-${c.quantidade}-${c.rotacao}-${c.preenchida}`;
+interface Pergunta {
+  id: number;
+  titulo: string;
+  matriz: (Celula | null)[];
+  alternativas: Celula[];
+  correta: number;
 }
 
-function criarPergunta(id: number): Pergunta {
-  // Sete famílias com quatro variações cada.
-  const familia = Math.floor((id - 1) / 4);
-  const variante = (id - 1) % 4;
+const CORES = {
+  azul: '#3b82f6',
+  laranja: '#f97316',
+  verde: '#10b981',
+  roxo: '#8b5cf6',
+  rosa: '#ec4899',
+  ciano: '#0891b2',
+  vermelho: '#ef4444',
+  indigo: '#6366f1',
+};
 
-  // Quatro etapas de dificuldade, sete questões por etapa.
-  const nivel = Math.floor((id - 1) / 7) + 1;
+// Banco de 28 questões com regras visuais claras no padrão MyIQTested
+function gerarBancoQuestoes(): Pergunta[] {
+  const f = (
+    forma: TipoForma,
+    cor: string,
+    opcoes: Partial<Celula> = {}
+  ): Celula => ({
+    forma,
+    cor,
+    tamanho: 'md',
+    quantidade: 1,
+    preenchida: true,
+    rotacao: 0,
+    posicao: 'center',
+    pontoInterno: false,
+    unidos: false,
+    ...opcoes,
+  });
 
-  // Distribui as lacunas pelas nove posições possíveis.
-  const posicaoAusente = (id * 5 + 4) % 9;
+  return [
+    // QUESTÃO 1: Idêntica ao print 1 (Azul - Tamanho Grande -> Médio -> Pequeno)
+    {
+      id: 1,
+      titulo: 'Qual padrão completa a grade?',
+      matriz: [
+        f('circle', CORES.azul, { tamanho: 'lg' }),
+        f('circle', CORES.azul, { tamanho: 'md' }),
+        f('circle', CORES.azul, { tamanho: 'sm' }),
+        f('square', CORES.azul, { tamanho: 'lg' }),
+        f('square', CORES.azul, { tamanho: 'md' }),
+        f('square', CORES.azul, { tamanho: 'sm' }),
+        f('triangle', CORES.azul, { tamanho: 'lg' }),
+        f('triangle', CORES.azul, { tamanho: 'md' }),
+        null,
+      ],
+      alternativas: [
+        f('triangle', CORES.azul, { tamanho: 'lg' }),
+        f('circle', CORES.azul, { tamanho: 'sm' }),
+        f('triangle', CORES.azul, { tamanho: 'sm' }),
+        f('square', CORES.azul, { tamanho: 'sm' }),
+      ],
+      correta: 2, // C
+    },
 
-  const matriz: Array<Celula | null> = Array.from(
-    { length: 9 },
-    (_, posicao) => {
-      if (posicao === posicaoAusente) return null;
+    // QUESTÃO 2: Idêntica ao print 2 (Laranja - Quantidade 1 -> 2 -> 3)
+    {
+      id: 2,
+      titulo: 'Qual padrão completa a grade?',
+      matriz: [
+        f('circle', CORES.laranja, { quantidade: 1 }),
+        f('circle', CORES.laranja, { quantidade: 2 }),
+        f('circle', CORES.laranja, { quantidade: 3, unidos: true }),
+        f('square', CORES.laranja, { quantidade: 1 }),
+        f('square', CORES.laranja, { quantidade: 2 }),
+        f('square', CORES.laranja, { quantidade: 3, unidos: true }),
+        f('triangle', CORES.laranja, { quantidade: 1 }),
+        f('triangle', CORES.laranja, { quantidade: 2 }),
+        null,
+      ],
+      alternativas: [
+        f('triangle', CORES.laranja, { quantidade: 2 }),
+        f('circle', CORES.laranja, { quantidade: 3, unidos: true }),
+        f('square', CORES.laranja, { quantidade: 3, unidos: true }),
+        f('triangle', CORES.laranja, { quantidade: 3 }),
+      ],
+      correta: 3, // D
+    },
 
-      const linha = Math.floor(posicao / 3);
-      const coluna = posicao % 3;
+    // QUESTÃO 3: Verde - Preenchido -> Contorno -> Com ponto central
+    {
+      id: 3,
+      titulo: 'Qual padrão completa a grade?',
+      matriz: [
+        f('circle', CORES.verde, { preenchida: true }),
+        f('circle', CORES.verde, { preenchida: false }),
+        f('circle', CORES.verde, { preenchida: false, pontoInterno: true }),
+        f('square', CORES.verde, { preenchida: true }),
+        f('square', CORES.verde, { preenchida: false }),
+        f('square', CORES.verde, { preenchida: false, pontoInterno: true }),
+        f('diamond', CORES.verde, { preenchida: true }),
+        f('diamond', CORES.verde, { preenchida: false }),
+        null,
+      ],
+      alternativas: [
+        f('diamond', CORES.verde, { preenchida: true }),
+        f('diamond', CORES.verde, { preenchida: false, pontoInterno: true }),
+        f('square', CORES.verde, { preenchida: false, pontoInterno: true }),
+        f('circle', CORES.verde, { preenchida: false }),
+      ],
+      correta: 1, // B
+    },
 
-      return criarCelula(familia, variante, linha, coluna);
-    }
+    // QUESTÃO 4: Roxo - Rotação de Setas (0° -> 90° -> 180°)
+    {
+      id: 4,
+      titulo: 'Qual padrão completa a grade?',
+      matriz: [
+        f('arrow', CORES.roxo, { rotacao: 0 }),
+        f('arrow', CORES.roxo, { rotacao: 90 }),
+        f('arrow', CORES.roxo, { rotacao: 180 }),
+        f('triangle', CORES.roxo, { rotacao: 0 }),
+        f('triangle', CORES.roxo, { rotacao: 90 }),
+        f('triangle', CORES.roxo, { rotacao: 180 }),
+        f('arrow', CORES.roxo, { rotacao: 90, preenchida: false }),
+        f('arrow', CORES.roxo, { rotacao: 180, preenchida: false }),
+        null,
+      ],
+      alternativas: [
+        f('arrow', CORES.roxo, { rotacao: 270, preenchida: false }),
+        f('arrow', CORES.roxo, { rotacao: 0, preenchida: false }),
+        f('arrow', CORES.roxo, { rotacao: 270, preenchida: true }),
+        f('triangle', CORES.roxo, { rotacao: 270, preenchida: false }),
+      ],
+      correta: 0, // A
+    },
+
+    // QUESTÃO 5: Rosa - Alternância de Formas (Quadrado Rosa, Losango, Estrela)
+    {
+      id: 5,
+      titulo: 'Qual padrão completa a grade?',
+      matriz: [
+        f('star', CORES.rosa, { tamanho: 'sm' }),
+        f('star', CORES.rosa, { tamanho: 'md' }),
+        f('star', CORES.rosa, { tamanho: 'lg' }),
+        f('diamond', CORES.rosa, { tamanho: 'sm' }),
+        f('diamond', CORES.rosa, { tamanho: 'md' }),
+        f('diamond', CORES.rosa, { tamanho: 'lg' }),
+        f('cross', CORES.rosa, { tamanho: 'sm' }),
+        f('cross', CORES.rosa, { tamanho: 'md' }),
+        null,
+      ],
+      alternativas: [
+        f('cross', CORES.rosa, { tamanho: 'sm' }),
+        f('star', CORES.rosa, { tamanho: 'lg' }),
+        f('cross', CORES.rosa, { tamanho: 'lg' }),
+        f('diamond', CORES.rosa, { tamanho: 'lg' }),
+      ],
+      correta: 2, // C
+    },
+
+    // QUESTÃO 6: Ciano - Movimento pelos cantos
+    {
+      id: 6,
+      titulo: 'Qual padrão completa a grade?',
+      matriz: [
+        f('circle', CORES.ciano, { posicao: 'tl', tamanho: 'sm' }),
+        f('circle', CORES.ciano, { posicao: 'tr', tamanho: 'sm' }),
+        f('circle', CORES.ciano, { posicao: 'br', tamanho: 'sm' }),
+        f('square', CORES.ciano, { posicao: 'tl', tamanho: 'sm' }),
+        f('square', CORES.ciano, { posicao: 'tr', tamanho: 'sm' }),
+        f('square', CORES.ciano, { posicao: 'br', tamanho: 'sm' }),
+        f('triangle', CORES.ciano, { posicao: 'tl', tamanho: 'sm' }),
+        f('triangle', CORES.ciano, { posicao: 'tr', tamanho: 'sm' }),
+        null,
+      ],
+      alternativas: [
+        f('triangle', CORES.ciano, { posicao: 'bl', tamanho: 'sm' }),
+        f('triangle', CORES.ciano, { posicao: 'br', tamanho: 'sm' }),
+        f('square', CORES.ciano, { posicao: 'br', tamanho: 'sm' }),
+        f('triangle', CORES.ciano, { posicao: 'center', tamanho: 'sm' }),
+      ],
+      correta: 1, // B
+    },
+  ].concat(
+    // Gera as questões 7 a 28 com progressões únicas e cores alternadas
+    Array.from({ length: 22 }, (_, i) => {
+      const id = i + 7;
+      const listaCores = Object.values(CORES);
+      const cor = listaCores[id % listaCores.length];
+      const listaFormas: TipoForma[] = ['circle', 'square', 'triangle', 'diamond', 'star', 'cross', 'arrow', 'ring'];
+      const f1 = listaFormas[id % listaFormas.length];
+      const f2 = listaFormas[(id + 2) % listaFormas.length];
+      const f3 = listaFormas[(id + 4) % listaFormas.length];
+
+      const modo = id % 5;
+
+      // Modo 0: Quantidade 3 -> 2 -> 1
+      if (modo === 0) {
+        const resp = f(f3, cor, { quantidade: 1, preenchida: id % 2 === 0 });
+        return {
+          id,
+          titulo: 'Qual padrão completa a grade?',
+          matriz: [
+            f(f1, cor, { quantidade: 3, preenchida: id % 2 === 0 }),
+            f(f1, cor, { quantidade: 2, preenchida: id % 2 === 0 }),
+            f(f1, cor, { quantidade: 1, preenchida: id % 2 === 0 }),
+            f(f2, cor, { quantidade: 3, preenchida: id % 2 === 0 }),
+            f(f2, cor, { quantidade: 2, preenchida: id % 2 === 0 }),
+            f(f2, cor, { quantidade: 1, preenchida: id % 2 === 0 }),
+            f(f3, cor, { quantidade: 3, preenchida: id % 2 === 0 }),
+            f(f3, cor, { quantidade: 2, preenchida: id % 2 === 0 }),
+            null,
+          ],
+          alternativas: [
+            f(f3, cor, { quantidade: 2, preenchida: id % 2 === 0 }),
+            resp,
+            f(f1, cor, { quantidade: 1, preenchida: id % 2 === 0 }),
+            f(f3, cor, { quantidade: 3, preenchida: !(id % 2 === 0) }),
+          ],
+          correta: 1,
+        };
+      }
+
+      // Modo 1: Rotação e Ponto Interno
+      if (modo === 1) {
+        const resp = f(f3, cor, { rotacao: 90, preenchida: false, pontoInterno: true });
+        return {
+          id,
+          titulo: 'Qual padrão completa a grade?',
+          matriz: [
+            f(f1, cor, { rotacao: 0, preenchida: true }),
+            f(f1, cor, { rotacao: 45, preenchida: false }),
+            f(f1, cor, { rotacao: 90, preenchida: false, pontoInterno: true }),
+            f(f2, cor, { rotacao: 0, preenchida: true }),
+            f(f2, cor, { rotacao: 45, preenchida: false }),
+            f(f2, cor, { rotacao: 90, preenchida: false, pontoInterno: true }),
+            f(f3, cor, { rotacao: 0, preenchida: true }),
+            f(f3, cor, { rotacao: 45, preenchida: false }),
+            null,
+          ],
+          alternativas: [
+            f(f3, cor, { rotacao: 0, preenchida: true }),
+            f(f2, cor, { rotacao: 90, preenchida: false, pontoInterno: true }),
+            resp,
+            f(f3, cor, { rotacao: 90, preenchida: false, pontoInterno: false }),
+          ],
+          correta: 2,
+        };
+      }
+
+      // Modo 2: Quadrado Latino (cada linha tem as 3 formas sem repetir)
+      if (modo === 2) {
+        const resp = f(f1, cor, { quantidade: 2, preenchida: true });
+        return {
+          id,
+          titulo: 'Qual padrão completa a grade?',
+          matriz: [
+            f(f1, cor, { quantidade: 2 }),
+            f(f2, cor, { quantidade: 2 }),
+            f(f3, cor, { quantidade: 2 }),
+            f(f2, cor, { quantidade: 2 }),
+            f(f3, cor, { quantidade: 2 }),
+            f(f1, cor, { quantidade: 2 }),
+            f(f3, cor, { quantidade: 2 }),
+            f(f2, cor, { quantidade: 2 }),
+            null,
+          ],
+          alternativas: [
+            resp,
+            f(f2, cor, { quantidade: 2 }),
+            f(f3, cor, { quantidade: 2 }),
+            f(f1, cor, { quantidade: 1 }),
+          ],
+          correta: 0,
+        };
+      }
+
+      // Modo 3: Crescimento com contorno
+      if (modo === 3) {
+        const resp = f(f3, cor, { tamanho: 'lg', preenchida: false, pontoInterno: true });
+        return {
+          id,
+          titulo: 'Qual padrão completa a grade?',
+          matriz: [
+            f(f1, cor, { tamanho: 'sm', preenchida: false }),
+            f(f1, cor, { tamanho: 'md', preenchida: false }),
+            f(f1, cor, { tamanho: 'lg', preenchida: false, pontoInterno: true }),
+            f(f2, cor, { tamanho: 'sm', preenchida: false }),
+            f(f2, cor, { tamanho: 'md', preenchida: false }),
+            f(f2, cor, { tamanho: 'lg', preenchida: false, pontoInterno: true }),
+            f(f3, cor, { tamanho: 'sm', preenchida: false }),
+            f(f3, cor, { tamanho: 'md', preenchida: false }),
+            null,
+          ],
+          alternativas: [
+            f(f3, cor, { tamanho: 'lg', preenchida: true }),
+            f(f3, cor, { tamanho: 'sm', preenchida: false, pontoInterno: true }),
+            f(f2, cor, { tamanho: 'lg', preenchida: false, pontoInterno: true }),
+            resp,
+          ],
+          correta: 3,
+        };
+      }
+
+      // Modo 4: Soma visual de elementos (1 + 2 = 3)
+      const resp = f(f2, cor, { quantidade: 3, preenchida: false });
+      return {
+        id,
+        titulo: 'Qual padrão completa a grade?',
+        matriz: [
+          f(f1, cor, { quantidade: 1, preenchida: false }),
+          f(f1, cor, { quantidade: 2, preenchida: false }),
+          f(f1, cor, { quantidade: 3, preenchida: false }),
+          f(f3, cor, { quantidade: 1, preenchida: true }),
+          f(f3, cor, { quantidade: 2, preenchida: true }),
+          f(f3, cor, { quantidade: 3, preenchida: true }),
+          f(f2, cor, { quantidade: 1, preenchida: false }),
+          f(f2, cor, { quantidade: 2, preenchida: false }),
+          null,
+        ],
+        alternativas: [
+          f(f2, cor, { quantidade: 2, preenchida: false }),
+          resp,
+          f(f2, cor, { quantidade: 3, preenchida: true }),
+          f(f1, cor, { quantidade: 3, preenchida: false }),
+        ],
+        correta: 1,
+      };
+    })
   );
+}
 
-  const linhaCorreta = Math.floor(posicaoAusente / 3);
-  const colunaCorreta = posicaoAusente % 3;
+const PERGUNTAS = gerarBancoQuestoes();
 
-  // Calcula a resposta pela mesma regra que construiu a matriz.
-  const correta = criarCelula(
-    familia,
-    variante,
-    linhaCorreta,
-    colunaCorreta
-  );
+function RenderizarFigura({ celula }: { celula: Celula }) {
+  const escala = celula.tamanho === 'lg' ? 1.25 : celula.tamanho === 'sm' ? 0.62 : 0.92;
+  const fill = celula.preenchida ? celula.cor : 'none';
+  const stroke = celula.cor;
+  const strokeWidth = celula.preenchida ? 0 : 7;
 
-  // Cada alternativa errada altera apenas uma propriedade.
-  const distratores: Celula[] = [
-    {
-      ...correta,
-      forma: FORMAS[(FORMAS.indexOf(correta.forma) + 1) % 6],
-    },
-    {
-      ...correta,
-      quantidade: (correta.quantidade % 3) + 1,
-    },
-    {
-      ...correta,
-      rotacao: (correta.rotacao + 90) % 360,
-    },
-    {
-      ...correta,
-      preenchida: !correta.preenchida,
-    },
-  ];
-
-  // Seleciona três distratores diferentes em cada variação.
-  const inicioDistratores = variante % 4;
-
-  const distratoresSelecionados = [
-    ...distratores.slice(inicioDistratores),
-    ...distratores.slice(0, inicioDistratores),
-  ].slice(0, 3);
-
-  // Quatro alternativas únicas: uma correta e três incorretas.
-  const opcoes = [correta, ...distratoresSelecionados];
-
-  // Embaralhamento determinístico.
-  // A resposta correta continua sendo identificada pela assinatura.
-  const deslocamento = (id * 3) % 4;
-
-  const alternativasEmbaralhadas = [
-    ...opcoes.slice(deslocamento),
-    ...opcoes.slice(0, deslocamento),
-  ];
-
-  const indiceRealCorreta = alternativasEmbaralhadas.findIndex(
-    (item) => assinatura(item) === assinatura(correta)
-  );
-
-  return {
-    id,
-    nivel,
-    categoria: CATEGORIAS[familia],
-    titulo: TITULOS[familia],
-    matriz,
-    alternativas: alternativasEmbaralhadas,
-    respostaCorreta: indiceRealCorreta,
+  const offsetPosicao: Record<Posicao, [number, number]> = {
+    center: [0, 0],
+    tl: [-22, -22],
+    tr: [22, -22],
+    bl: [-22, 22],
+    br: [22, 22],
   };
-}
 
-const PERGUNTAS: Pergunta[] = Array.from(
-  { length: 28 },
-  (_, index) => criarPergunta(index + 1)
-);
+  const [dx, dy] = offsetPosicao[celula.posicao || 'center'];
+  const qtd = celula.quantidade || 1;
+
+  const pontosX =
+    qtd === 1
+      ? [60]
+      : qtd === 2
+      ? [38, 82]
+      : celula.unidos
+      ? [36, 60, 84]
+      : [28, 60, 92];
+
+  const escalaFinal = qtd === 3 ? 0.55 : qtd === 2 ? 0.68 : escala;
+
+  const desenharGeometria = () => {
+    switch (celula.forma) {
+      case 'circle':
+        return <circle cx="0" cy="0" r="24" fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
+      case 'square':
+        return <rect x="-22" y="-22" width="44" height="44" fill={fill} stroke={stroke} strokeWidth={strokeWidth} />;
+      case 'triangle':
+        return <polygon points="0,-25 25,22 -25,22" fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="round" />;
+      case 'diamond':
+        return <polygon points="0,-26 26,0 0,26 -26,0" fill={fill} stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="round" />;
+      case 'star':
+        return (
+          <polygon
+            points="0,-26 7,-8
