@@ -85,7 +85,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans antialiased">
       
-      {/* Header Perfeito */}
+      {/* Header Perfeito e Limpo (Sem botões inúteis) */}
       <header className="flex justify-between items-center px-6 sm:px-12 py-3.5 bg-[#071026] text-white border-b border-blue-900/50 sticky top-0 z-50 shadow-lg">
         <div className="flex items-center space-x-3.5">
           <LogoQipro />
@@ -99,16 +99,9 @@ export default function Home() {
           </div>
         </div>
 
-        <nav className="hidden lg:flex space-x-8 text-sm font-medium text-slate-300">
-          <a href="#about" className="hover:text-cyan-400 transition-colors">Sobre o Teste</a>
-          <a href="#methodology" className="hover:text-cyan-400 transition-colors">Metodologia</a>
-          <a href="#comentarios" className="hover:text-cyan-400 transition-colors">Comentários ao Vivo</a>
-          <a href="#faq" className="hover:text-cyan-400 transition-colors">FAQ</a>
-        </nav>
-
         <a 
           href="/teste" 
-          className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-xs sm:text-sm font-extrabold uppercase tracking-wider px-5 py-2.5 rounded-xl transition shadow-lg shadow-cyan-500/20 cursor-pointer"
+          className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white text-xs sm:text-sm font-extrabold uppercase tracking-wider px-6 py-2.5 rounded-xl transition shadow-lg shadow-cyan-500/20 cursor-pointer"
         >
           Iniciar Teste
         </a>
